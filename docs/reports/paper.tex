@@ -10,6 +10,7 @@
 \usepackage{array}
 \usepackage{multirow}
 \usepackage{url}
+\graphicspath{{figures/}}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -198,6 +199,15 @@ xlm-roberta-base & 0.6894 & 0.1632 & 0.5626 & $-$13.49 acc pts \\
 
 The ranking shows that IndicBERTv2 is the most suitable backbone for this corpus. Hindi-BERT-v2 and MuRIL also remain strong options. The original IndicBERT gives only moderate results under LoRA. XLM-RoBERTa does not adapt well in this setting.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{benchmark_comparison.png}
+\caption{Accuracy, macro F1, and weighted F1 for all five LoRA-adapted backbones on the Bhagavata Purana Sanskrit PoS test set, sorted by macro F1.}
+\label{fig:benchmark_comparison}
+\end{figure}
+
+Figure~\ref{fig:benchmark_comparison} visualizes the summary in Table~\ref{tab:benchmark_summary}. The gap between accuracy and macro F1 is largest for \texttt{xlm-roberta-base}: its accuracy (0.6894) looks moderate, but its macro F1 collapses to 0.1632 because the model collapses to predicting NOUN for nearly every token, as the per-class breakdown in Section~\ref{sec:perclass} confirms. This is exactly the failure mode that motivates our choice of macro F1, rather than accuracy, as the primary ranking metric.
+
 \subsection{Effect of Fine-Tuning Strategy}
 The training pipeline does not rely on plain fine-tuning alone. It combines LoRA with class-weighted loss, verse-level context, label smoothing, and macro-F1-based checkpoint selection. This design improves the training signal for rare classes and reduces bias toward NOUN.
 
@@ -217,60 +227,47 @@ The preprocessing pipeline also plays an important role. It applies verse cleani
 
 This design matters because Sanskrit morphology often gives multiple candidate analyses for one token. If the pipeline always trusts the first analyzer output, the data can overproduce NOUN labels. The rule layer corrects many such cases, particularly for PRON, IND, PART, and finite VERB labels.
 
-\begin{table}[htbp]
-\caption{Preprocessing and Training Ablation Summary}
-\begin{center}
-\begin{tabular}{|p{3.0cm}|c|c|c|c|}
-\hline
-\textbf{Setting / Comparison} & \textbf{Acc.} & \textbf{Macro F1} & \textbf{Wtd. F1} & \textbf{Main Gain} \\
-\hline
-Before data cleaning & [ ] & [ ] & [ ] & [ ] \\
-\hline
-After data cleaning & [ ] & [ ] & [ ] & [ ] \\
-\hline
-Before sandhi splitting & [ ] & [ ] & [ ] & [ ] \\
-\hline
-After sandhi splitting & [ ] & [ ] & [ ] & [ ] \\
-\hline
-Before rule-based correction & [ ] & [ ] & [ ] & [ ] \\
-\hline
-After rule-based correction & [ ] & [ ] & [ ] & [ ] \\
-\hline
-Normal training & [ ] & [ ] & [ ] & [ ] \\
-\hline
-After LoRA fine-tuning & [ ] & [ ] & [ ] & [ ] \\
-\hline
-\end{tabular}
-\label{tab:ablation_summary}
-\end{center}
-\end{table}
+A controlled ablation that isolates the individual contribution of data cleaning, sandhi splitting, and rule-based label correction (before vs.\ after each step, in accuracy/macro F1/weighted F1) was not run as part of this benchmark; all five models in Table~\ref{tab:benchmark_summary} were trained on the same fully preprocessed corpus. We report this explicitly rather than estimate the individual contributions, and we list a component-wise ablation study as a concrete direction for future work in the Limitations section.
 
 \subsection{Class-Wise Discussion}
 The class weighting scheme shows where the challenge lies. NOUN has the lowest weight because it appears most often, while PART has the highest weight because it appears least often. PRON and VERB also receive much higher penalties than NOUN, confirming that the model must learn under uneven supervision.
 
 The earlier project baseline also supports this point: PRON and VERB showed lower F1 than the dominant class. This pattern is common in Sanskrit because many forms remain ambiguous without context. Verse context helps, but model capacity still matters; the stronger backbones handle these hard boundaries better.
 
-\begin{table}[htbp]
-\caption{Class-Wise Improvement after Rule-Based Correction}
+\subsection{Per-Class Performance Across Models}
+\label{sec:perclass}
+Table~\ref{tab:perclass_f1} reports the per-class F1 score of every model on each of the five POS labels, and Fig.~\ref{fig:perclass_f1} visualizes the same values. The highest F1 in each row is shown in bold.
+
+\begin{table*}[htbp]
+\caption{Per-Class F1 Scores Across Models on the Bhagavata Purana PoS Test Set}
 \begin{center}
-\begin{tabular}{|c|c|c|c|}
+\begin{tabular}{|l|c|c|c|c|c|}
 \hline
-\textbf{POS Class} & \textbf{F1 Before} & \textbf{F1 After} & \textbf{Improvement} \\
+\textbf{Class} & \textbf{IndicBERT} & \textbf{MuRIL} & \textbf{XLM-R} & \textbf{Hindi-BERT-v2} & \textbf{IndicBERTv2} \\
 \hline
-NOUN & [ ] & [ ] & [ ] \\
+IND  & 0.7514 & 0.9204 & 0.0000 & 0.9218 & \textbf{0.9525} \\
 \hline
-PRO/PRON & [ ] & [ ] & [ ] \\
+NOUN & 0.8790 & 0.9675 & 0.8161 & 0.9669 & \textbf{0.9803} \\
 \hline
-VERB & [ ] & [ ] & [ ] \\
+PART & 0.6943 & 0.9503 & 0.0000 & 0.9623 & \textbf{0.9809} \\
 \hline
-IND & [ ] & [ ] & [ ] \\
+PRON & 0.8301 & 0.9673 & 0.0000 & \textbf{0.9767} & 0.9789 \\
 \hline
-PART & [ ] & [ ] & [ ] \\
+VERB & 0.5737 & 0.8655 & 0.0000 & 0.8586 & \textbf{0.9110} \\
 \hline
 \end{tabular}
-\label{tab:classwise_improvement}
+\label{tab:perclass_f1}
 \end{center}
-\end{table}
+\end{table*}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{per_class_f1.png}
+\caption{Per-class F1 scores for all five models on the Bhagavata Purana PoS test set. \texttt{xlm-roberta-base} collapses to predicting NOUN almost exclusively, scoring 0.0 F1 on IND, PART, PRON, and VERB.}
+\label{fig:perclass_f1}
+\end{figure}
+
+Table~\ref{tab:perclass_f1} makes the failure mode of \texttt{xlm-roberta-base} explicit: it scores 0.0 F1 on IND, PART, PRON, and VERB, meaning it never correctly predicts any of these four classes on the test set and instead collapses to predicting NOUN for almost every token, which is why its accuracy (0.6894, close to the 0.69 NOUN class share) remains misleadingly high while its macro F1 collapses to 0.1632. IndicBERTv2 achieves the best or near-best F1 on every class, and its advantage is largest on the two rarest, most under-represented classes, PART (0.9809) and VERB (0.9110), which is consistent with the model benefiting most from the class-weighted loss on exactly the categories that need it most. We note that we did not compute confusion matrices for these runs (only per-class precision/recall/F1 was logged during training), so we report per-class F1 rather than a full confusion analysis; a token-level confusion matrix per model is a natural next step and is listed under Limitations.
 
 \subsection{Discussion}
 The main result of this study is simple: LoRA works best when the base model already matches the language family and script well. IndicBERTv2 gives the strongest result because it combines a stronger encoder with the same efficient adaptation method. Hindi-BERT-v2 and MuRIL also adapt well, which shows that nearby Indic pretraining transfers effectively to Sanskrit PoS tagging.
@@ -289,9 +286,9 @@ The benchmark also reveals complementary model behavior. Stronger Indic-focused 
 Overall, this work shows that parameter-efficient fine-tuning can produce strong Sanskrit PoS taggers when it uses the right pretrained backbone and a linguistically informed pipeline. We hope this study can support future Sanskrit NLP research and serve as a useful reference for other low-resource classical languages.
 
 \subsection*{Limitations}
-This study has several limitations. First, the corpus remains imbalanced across the five POS classes. This imbalance can still affect generalization, especially for PART, PRON, and VERB. Second, the benchmark focuses on validation performance within one project dataset; it does not yet test cross-corpus transfer or broader domain robustness. Third, the current system still depends on rule-based preprocessing and analyzer-driven label selection. These choices improve quality, but they also tie the pipeline to the current annotation logic.
+This study has several limitations. First, the corpus remains imbalanced across the five POS classes. This imbalance can still affect generalization, especially for PART, PRON, and VERB. Second, the benchmark focuses on validation performance within one project dataset; it does not yet test cross-corpus transfer or broader domain robustness. Third, the current system still depends on rule-based preprocessing and analyzer-driven label selection. These choices improve quality, but they also tie the pipeline to the current annotation logic. Fourth, we report per-class F1 (Table~\ref{tab:perclass_f1}) but not a full token-level confusion matrix, since confusion counts were not logged during the training runs reported here; consequently, we cannot yet identify which specific classes \texttt{xlm-roberta-base} confuses NOUN with, only that it does. Fifth, we did not run a component-wise ablation isolating the individual contribution of data cleaning, sandhi splitting, and rule-based correction; all five benchmarked models share the same fully preprocessed corpus.
 
-Future work can address these gaps in four directions. First, we can build a larger and more balanced Sanskrit PoS corpus. Second, we can test ensemble and voting methods based on per-class strengths. Third, we can study controlled augmentation, sandhi-aware preprocessing, and better handling of ambiguous forms. Fourth, we can connect PoS tagging with downstream tasks such as parsing, semantic analysis, and machine translation. These steps can help move Sanskrit NLP toward more robust and linguistically aware modeling.
+Future work can address these gaps in six directions. First, we can build a larger and more balanced Sanskrit PoS corpus. Second, we can test ensemble and voting methods based on per-class strengths. Third, we can study controlled augmentation, sandhi-aware preprocessing, and better handling of ambiguous forms. Fourth, we can connect PoS tagging with downstream tasks such as parsing, semantic analysis, and machine translation. Fifth, we can log per-token predictions during training to build full confusion matrices and identify systematic tag-level confusions, following the error-analysis methodology used in recent POS tagging benchmarks for other low-resource languages. Sixth, we can run a controlled ablation over data cleaning, sandhi splitting, and rule-based correction to quantify each preprocessing step's individual contribution. These steps can help move Sanskrit NLP toward more robust and linguistically aware modeling.
 
 \begin{thebibliography}{00}
 
